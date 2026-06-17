@@ -13,6 +13,7 @@
 
 <!-- Firebase (chargé depuis le CDN au lancement dans le navigateur) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <style>
@@ -230,7 +231,7 @@ function normalize(d){
 }
 function saveLocal(){setLS(KEY,JSON.stringify(data))}
 
-/* ---------- synchronisation Firebase (Cloud Firestore) ---------- */
+/* ---------- synchronisation Firebase (Firestore + auth anonyme) ---------- */
 let syncRef=null, unsub=null, applyingRemote=false, pushTimer=null;
 const syncConfigured=()=>!!(FIREBASE_CONFIG.apiKey&&FIREBASE_CONFIG.projectId);
 const getSyncCode=()=>getLS(SYNC_KEY)||'';
@@ -241,7 +242,7 @@ function setSyncStatus(state){ // 'off' | 'ok' | 'err'
   if(state==='ok')dot.classList.add('ok');
   if(state==='err')dot.classList.add('err');
 }
-function initSync(){
+function initSync(prevCode){
   if(unsub){unsub();unsub=null}
   syncRef=null;
   if(!syncConfigured()){setSyncStatus('off');return}
@@ -249,30 +250,44 @@ function initSync(){
   if(!code){setSyncStatus('off');return}
   try{
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
-    const db=firebase.firestore();
-    syncRef=db.collection('credits').doc(code);
-    // écoute temps réel
-    unsub=syncRef.onSnapshot(snap=>{
-      setSyncStatus('ok');
-      if(snap.metadata.hasPendingWrites)return;      // ignore nos propres écritures
-      const d=snap.exists?snap.data():null;
-      if(d&&d.json){
-        try{const remote=JSON.parse(d.json);
-          if(JSON.stringify(remote)!==JSON.stringify(data)){
-            applyingRemote=true;data=normalize(remote);saveLocal();render();applyingRemote=false;
-          }
-        }catch(e){}
-      }
-    },()=>setSyncStatus('err'));
-    // si le document n'existe pas encore, on y pousse l'état local
-    syncRef.get().then(s=>{if(!s.exists)pushCloud()}).catch(()=>setSyncStatus('err'));
+    const auth=firebase.auth();
+    const go=()=>attachSync(code,prevCode);
+    if(auth.currentUser){go()}                       // connexion anonyme déjà faite
+    else{
+      auth.signInAnonymously().catch(()=>setSyncStatus('err'));
+      const offAuth=auth.onAuthStateChanged(u=>{if(u){offAuth();go()}});
+    }
   }catch(e){setSyncStatus('err')}
+}
+function attachSync(code,prevCode){
+  const isSwitch=!!prevCode&&prevCode!==code;        // on change pour un code différent
+  const db=firebase.firestore();
+  syncRef=db.collection('credits').doc(code);
+  unsub=syncRef.onSnapshot(snap=>{
+    setSyncStatus('ok');
+    if(snap.metadata.hasPendingWrites)return;        // ignore nos propres écritures
+    const d=snap.exists?snap.data():null;
+    if(d&&d.json){
+      try{const remote=JSON.parse(d.json);
+        if(JSON.stringify(remote)!==JSON.stringify(data)){
+          applyingRemote=true;data=normalize(remote);saveLocal();render();applyingRemote=false;
+        }
+      }catch(e){}
+    }
+  },()=>setSyncStatus('err'));
+  syncRef.get().then(s=>{
+    if(!s.exists){
+      if(isSwitch){data={credits:[]};saveLocal();render()}  // nouveau code => on repart à vide
+      pushCloud();                                            // crée le document du code
+    }
+    setSyncStatus('ok');
+  }).catch(()=>setSyncStatus('err'));
 }
 function pushCloud(){
   if(!syncRef)return;
   try{syncRef.set({json:JSON.stringify(data),ts:Date.now()})}catch(e){}
 }
-function enableSync(code){setLS(SYNC_KEY,code.trim());initSync()}
+function enableSync(code){const prev=getSyncCode();setLS(SYNC_KEY,code.trim());initSync(prev)}
 function disableSync(){if(unsub){unsub();unsub=null}syncRef=null;setLS(SYNC_KEY,'');setSyncStatus('off')}
 
 /* ---------- enregistrement (local + cloud) ---------- */
@@ -531,7 +546,7 @@ document.getElementById('btnCats').onclick=openCats;
 document.getElementById('btnBackup').onclick=openBackup;
 
 /* ---------- init ---------- */
-load();showHome();initSync();
+load();showHome();initSync(getSyncCode());
 
 /* ---------- PWA : service worker ---------- */
 if('serviceWorker' in navigator){
