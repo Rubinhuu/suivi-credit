@@ -1,5 +1,5 @@
 /* Suivi de crédits — cache de l'app pour le hors-ligne */
-const CACHE = 'suivi-credits-v1';
+const CACHE = 'suivi-credits-v2';
 const CORE = [
   './', './index.html', './manifest.json',
   './icon-192.png', './icon-512.png', './icon-512-maskable.png'
