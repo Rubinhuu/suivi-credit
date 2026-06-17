@@ -24,9 +24,16 @@
     font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{background:var(--bg)}
   body{background:var(--bg);color:var(--text);min-height:100vh;
     padding:max(18px,env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom));}
-  .wrap{max-width:480px;margin:0 auto}
+  .wrap{width:100%;max-width:1040px;margin:0 auto}
+  /* accueil : grille de cartes adaptative */
+  #cardsArea{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+  #cardsArea .ccard{margin-bottom:0}
+  #cardsArea .empty{grid-column:1/-1}
+  /* détail : colonne de lecture confortable, centrée */
+  #detail{max-width:600px;margin:0 auto}
 
   .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:10px}
   .top .lab{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700}
